@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "items": [
     {
-      "url": "https://raw.githubusercontent.com/BrunoFelisbino/Fleet-Trip-360/main/trips/?v=0.1.0",
+      "url": "https://raw.githubusercontent.com/BrunoFelisbino/Fleet-Trip-360/main/trips/index.html?v=0.1.0",
       "path": "ActivityLink/",
       "menuName": {
         "en": "Fleet Trip 360",
