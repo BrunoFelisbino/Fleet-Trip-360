@@ -4,13 +4,13 @@
   "version": "0.1.0",
   "items": [
     {
-      "url": "https://brunofelisbino.github.io/fleet-trip-360/trips/?v=0.1.0",
+      "url": "https://raw.githubusercontent.com/BrunoFelisbino/Fleet-Trip-360/main/trips/?v=0.1.0",
       "path": "ActivityLink/",
       "menuName": {
         "en": "Fleet Trip 360",
         "pt-BR": "Fleet Trip 360"
       },
-      "svgIcon": "https://brunofelisbino.github.io/fleet-trip-360/icon.svg"
+      "svgIcon": "https://raw.githubusercontent.com/BrunoFelisbino/Fleet-Trip-360/main/icon.svg"
     }
   ],
   "isSigned": false
