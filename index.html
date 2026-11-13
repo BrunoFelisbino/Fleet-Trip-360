@@ -6,8 +6,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>Fleet Trip 360</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="./reports/premium.css?v=0.1.2" media="print"/>
-<script src="./print-options.js?v=0.1.2"></script>
+<link rel="stylesheet" href="./reports/premium.css?v=0.1.3" media="print"/>
+<script src="./print-options.js?v=0.1.3"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>html,body{margin:0;padding:0;background:#f5f8fc;color:#172033;font-family:'Segoe UI',system-ui,sans-serif} .map{height:420px;border-radius:12px;border:1px solid #e5eaf1}</style>
 </head>
@@ -16,7 +16,7 @@
 <script>
 'use strict';
 const DAY_MS=86400000;
-let apiRef=null,map=null,layer=null,vehicles=[],trips=[],logs=[],events=[],changes=[],rules=[],drivers=[],selectedDevice=null,loadToken=0;
+let apiRef=null,map=null,layer=null,vehicles=[],trips=[],logs=[],events=[],changes=[],rules=[],drivers=[],selectedDevice=null,loadToken=0,expandedEvents={};
 const $=id=>document.getElementById(id);
 const call=(api,t,s)=>new Promise((ok,err)=>api.call('Get',{typeName:t,search:s||{}},ok,err));
 const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -42,7 +42,7 @@ $('app').innerHTML=`<div class="head"><div class="title"><strong>Fleet Trip 360<
 <div class="panel"><div class="pt">Mapa do historico</div><div id="mapBox" class="map"></div></div>
 <div class="panel"><div class="pt">Viagens</div><div id="tripsBox"></div></div>
 </div>
-<div class="panel"><div class="pt">Excecoes</div><div id="eventsBox"></div></div>
+<div class="panel"><div class="pt">Excecoes agrupadas</div><div id="eventsBox"></div></div>
 <footer class="project-credit">Desenvolvido por Bruno Henrique Felisbino Goncalves</footer>`;
 $('loadBtn').onclick=()=>loadHistory(apiRef);
 $('clearBtn').onclick=clearFilters;
@@ -57,9 +57,9 @@ async function loadHistory(api){if(!api){alertMsg('Abra dentro do MyGeotab.',fal
 function ruleName(id){const r=rules.find(x=>x.id===id);return r&&r.name?r.name:'Regra'}
 function driverName(id){const d=drivers.find(x=>x.id===id);return d&&d.name?d.name:id}
 function render(){renderKpis();renderTrips();renderEvents();renderMap()}
-function renderKpis(){const dist=trips.reduce((s,t)=>s+Number(t.distance||t.Distance||0),0)/1000;const drive=trips.reduce((s,t)=>s+parseDurationMs(t.drivingDuration),0);const stop=trips.reduce((s,t)=>s+parseDurationMs(t.stopDuration),0);$('tripCount').textContent=trips.length;$('distanceKm').textContent=dist.toFixed(1);$('kpisBox').innerHTML=[['Viagens',trips.length,'periodo','var(--blue)'],['Distancia',dist.toFixed(1)+' km','oficial','var(--green)'],['Tempo dirigindo',Math.round(drive/60000)+' min','Trip','var(--blue)'],['Tempo parado',Math.round(stop/60000)+' min','Trip','var(--orange)'],['Excecoes',events.length,'periodo','var(--red)']].map(c=>`<div class="kpi"><span>${c[0]}</span><b style="color:${c[3]}">${c[1]}</b><small>${c[2]}</small></div>`).join('')}
+function renderKpis(){const official=trips.reduce((s,t)=>s+Number(t.distance||t.Distance||0),0)/1000;let dist=official;if(!dist&&logs.length>1){let km=0;for(let i=1;i<logs.length;i++){const a=logs[i-1],b=logs[i];const R=6371,dLat=(Number(b.latitude)-Number(a.latitude))*Math.PI/180,dLng=(Number(b.longitude)-Number(a.longitude))*Math.PI/180;const x=Math.sin(dLat/2)**2+Math.cos(Number(a.latitude)*Math.PI/180)*Math.cos(Number(b.latitude)*Math.PI/180)*Math.sin(dLng/2)**2;km+=R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x))}dist=km}const drive=trips.reduce((s,t)=>s+parseDurationMs(t.drivingDuration),0);const stop=trips.reduce((s,t)=>s+parseDurationMs(t.stopDuration),0);$('tripCount').textContent=trips.length;$('distanceKm').textContent=dist.toFixed(1)+(official?'':' (est.)');$('kpisBox').innerHTML=[['Viagens',trips.length,'periodo','var(--blue)'],['Distancia',dist.toFixed(1)+' km',official?'oficial':'estimado GPS','var(--green)'],['Tempo dirigindo',Math.round(drive/60000)+' min','Trip','var(--blue)'],['Tempo parado',Math.round(stop/60000)+' min','Trip','var(--orange)'],['Excecoes',events.length,'periodo','var(--red)']].map(c=>`<div class="kpi"><span>${c[0]}</span><b style="color:${c[3]}">${c[1]}</b><small>${c[2]}</small></div>`).join('')}
 function renderTrips(){$('tripsBox').innerHTML=trips.length?trips.map((t,i)=>`<div style="padding:8px;border-bottom:1px solid #e5eaf1"><b>#${i+1}</b> ${fmtDate(t.start)} -> ${fmtDate(t.stop)}<br><small>Condutor: ${esc((t.driver && driverName(t.driver.id)) || "Nao identificado")} - ${(Number(t.distance||t.Distance||0)/1000).toFixed(1)} km - media ${Math.round(t.averageSpeed||0)} km/h - max ${Math.round(t.maximumSpeed||0)} km/h - excecoes ${t.exceptionCount||0}</small></div>`).join(''):'<div style="padding:20px;text-align:center;color:#64748b">Sem viagens.</div>'}
-function renderEvents(){$('eventsBox').innerHTML=events.length?events.map(e=>`<div style="padding:6px;border-bottom:1px solid #e5eaf1"><b>${esc(ruleName(e.rule&&e.rule.id))}</b> - ${fmtDate(e.activeFrom)} - ${Math.round(parseDurationMs(e.duration)/1000)}s</div>`).join(''):'<div style="padding:20px;text-align:center;color:#64748b">Sem excecoes.</div>'}
+function renderEvents(){if(!events.length){$('eventsBox').innerHTML='<div style="padding:20px;text-align:center;color:#64748b">Sem excecoes.</div>';return}const groups={};events.forEach(e=>{const k=ruleName(e.rule&&e.rule.id);(groups[k]||(groups[k]=[])).push(e)});$('eventsBox').innerHTML=Object.keys(groups).map(k=>{const list=groups[k],total=list.reduce((s,e)=>s+parseDurationMs(e.duration),0),open=!!expandedEvents[k];return `<div style="border-bottom:1px solid #e5eaf1"><div style="padding:8px;cursor:pointer;font-weight:700" onclick="expandedEvents['${k}']=!expandedEvents['${k}'];render()">${esc(k)} - ${list.length} ocorrencia(s) - ${Math.round(total/1000)}s ${open?'[-]':'[+]'}</div>${open?list.map(e=>`<div style="padding:6px 12px;font-size:12px">${fmtDate(e.activeFrom)} - ${Math.round(parseDurationMs(e.duration)/1000)}s${e.maximumSpeed?` - ${Math.round(e.maximumSpeed)} km/h`:''}</div>`).join(''):''}</div>`}).join('')}
 function renderMap(){if(!map){map=L.map('mapBox');L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OpenStreetMap contributors'}).addTo(map);layer=L.layerGroup().addTo(map)}layer.clearLayers();const pts=logs.map(r=>[Number(r.latitude),Number(r.longitude)]).filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1]));if(pts.length){const poly=L.polyline(pts,{color:'#0ea5e9',weight:3}).addTo(layer);map.fitBounds(poly.getBounds(),{padding:[20,20]});if(pts[0])L.marker(pts[0]).addTo(layer).bindPopup('Inicio');if(pts[pts.length-1])L.marker(pts[pts.length-1]).addTo(layer).bindPopup('Termino')}events.forEach(e=>{const lr=nearestLog(e.activeFrom);if(!lr)return;const m=L.circleMarker([Number(lr.latitude),Number(lr.longitude)],{radius:6,color:'#ef4444',fillColor:'#ef4444',fillOpacity:.8}).addTo(layer);m.bindPopup(esc(ruleName(e.rule&&e.rule.id))+'<br>'+fmtDate(e.activeFrom))})}
 function nearestLog(dt){if(!logs.length||!dt)return null;const t=new Date(dt).getTime();let best=null,diff=Infinity;logs.forEach(r=>{const d=Math.abs(new Date(r.dateTime).getTime()-t);if(d<diff){diff=d;best=r}});return diff<=300000?best:null}
 function clearFilters(){$('deviceQuery').value='';$('periodFilter').value='1';setRangeFromPeriod();trips=[];logs=[];events=[];render()}
