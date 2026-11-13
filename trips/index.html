@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link rel="stylesheet" href="./reports/premium.css?v=0.1.3" media="print"/>
 <script src="./print-options.js?v=0.1.3"></script>
+<script src="./pdf-report.js?v=0.1.6"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>html,body{margin:0;padding:0;background:#f5f8fc;color:#172033;font-family:'Segoe UI',system-ui,sans-serif} .map{height:420px;border-radius:12px;border:1px solid #e5eaf1}</style>
 </head>
@@ -46,7 +47,7 @@ $('app').innerHTML=`<div class="head"><div class="title"><strong>Fleet Trip 360<
 <footer class="project-credit">Desenvolvido por Bruno Henrique Felisbino Goncalves</footer>`;
 $('loadBtn').onclick=()=>loadHistory(apiRef);
 $('clearBtn').onclick=clearFilters;
-$('pdfBtn').onclick=()=>window.print();
+$('pdfBtn').onclick=()=>exportPdf();
 $('periodFilter').onchange=()=>{setRangeFromPeriod();};
 setRangeFromPeriod();
 }
