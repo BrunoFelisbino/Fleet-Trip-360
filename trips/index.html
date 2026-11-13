@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>Fleet Trip 360 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â Geotab Add-In</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="../reports/premium.css?v=0.1.0" media="print"/>
+<script src="../print-options.js?v=0.1.0"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>html,body{margin:0;padding:0;background:#f5f8fc;color:#172033;font-family:'Segoe UI',system-ui,sans-serif} .map{height:420px;border-radius:12px;border:1px solid #e5eaf1}</style>
+</head>
+<body>
+<div id="app"><div style="padding:40px;color:#64748b;font-size:13px">Carregando Fleet Trip 360...</div></div>
+<script>
+'use strict';
+const DAY=86400000;
+let apiRef=null,map=null,layer=null,vehicles=[],trips=[],logs=[],events=[],changes=[],selectedDevice=null,loadToken=0;
+const $=id=>document.getElementById(id);
+const call=(api,t,s)=>new Promise((ok,err)=>api.call('Get',{typeName:t,search:s||{}},ok,err));
+const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function fmtDate(d){try{return new Date(d).toLocaleString('pt-BR')}catch(e){return String(d||'')}}
+function fmtNum(n){return Number(n||0).toLocaleString('pt-BR')}
+function currentRange(){const fromEl=$('dateFrom'),toEl=$('dateTo');let from=fromEl&&fromEl.value?new Date(fromEl.value):null,to=toEl&&toEl.value?new Date(toEl.value):null;if(!from||isNaN(from.getTime())){const days=Number($('periodFilter').value)||1;to=to&&!isNaN(to.getTime())?to:new Date();from=new Date(to.getTime()-days*DAY)}if(!to||isNaN(to.getTime()))to=new Date();if(from.getTime()>to.getTime()){const tmp=from;from=to;to=tmp}return{from,to}}
+function shell(){
+$('app').innerHTML=`<div class="head"><div class="title"><strong>Fleet Trip 360</strong><div class="sub">HistÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³rico real de viagens ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ MyGeotab</div></div><div class="pill" id="statusBox">Conectando...</div></div>
+<div class="bar">
+<select id="deviceSelect"><option value="">Selecione o veÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­culo</option></select>
+<select id="periodFilter"><option value="1" selected>Hoje</option><option value="7">7 dias</option><option value="custom">Personalizado</option></select>
+<label class="datefield">De <input type="datetime-local" id="dateFrom"/></label>
+<label class="datefield">AtÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â© <input type="datetime-local" id="dateTo"/></label>
+<button class="primary" id="loadBtn">Consultar</button>
+<button id="clearBtn">Limpar</button>
+<button id="pdfBtn">Exportar PDF</button>
+</div>
+<div class="info"><span>VeÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­culos: <b id="countBox">0</b></span><span>Viagens: <b id="tripCount">0</b></span><span>DistÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ncia: <b id="distanceKm">0</b> km</span></div>
+<div id="alertBox" class="alert" style="display:none"></div>
+<div id="kpisBox" class="grid"></div>
+<div class="cols" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+<div class="panel"><div class="pt">Mapa do histÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³rico</div><div id="mapBox" class="map"></div></div>
+<div class="panel"><div class="pt">Viagens</div><div id="tripsBox"></div></div>
+</div>
+<div class="panel"><div class="pt">ExceÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âµes</div><div id="eventsBox"></div></div>
+<footer class="project-credit"><span>Desenvolvido por</span> <a href="https://github.com/BrunoFelisbino" target="_blank">Bruno Henrique Felisbino GonÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§alves</a></footer>`;
+$('loadBtn').onclick=()=>loadHistory(apiRef);
+$('clearBtn').onclick=clearFilters;
+$('pdfBtn').onclick=()=>window.print();
+$('periodFilter').onchange=()=>{setRangeFromPeriod();};
+setRangeFromPeriod();
+}
+function setRangeFromPeriod(){const days=Number($('periodFilter').value)||1;const to=new Date();const from=new Date(to.getTime()-days*DAY);$('dateFrom').value=toLocalInput(from);$('dateTo').value=toLocalInput(to)}
+function toLocalInput(d){const pad=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())}
+async function loadDevices(){try{const devs=await call(apiRef,'Device',{});vehicles=devs||[];$('countBox').textContent=vehicles.length;const sel=$('deviceSelect');sel.innerHTML='<option value="">Selecione o veÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­culo</option>'+vehicles.map(d=>`<option value="${esc(d.id)}">${esc(d.name||d.id)} ${d.licensePlate?'- '+esc(d.licensePlate):''}</option>`).join('')}catch(e){console.error(e);alertMsg('Erro ao carregar veÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­culos: '+(e.message||''),false,true)}}
+async function loadHistory(api){if(!api){alertMsg('Abra dentro do MyGeotab.',false,true);return}const id=$('deviceSelect').value;if(!id){alertMsg('Selecione um veÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­culo.',false,true);return}selectedDevice=vehicles.find(v=>v.id===id);const range=currentRange();const token=++loadToken;setStatus('Consultando viagens...');try{const [tr,lr,ee,dc]=await Promise.all([call(api,'Trip',{deviceSearch:{id:id},fromDate:range.from.toISOString(),toDate:range.to.toISOString(),includeOverlappedTrips:true}).catch(()=>[]),call(api,'LogRecord',{deviceSearch:{id:id},fromDate:range.from.toISOString(),toDate:range.to.toISOString()}).catch(()=>[]),call(api,'ExceptionEvent',{deviceSearch:{id:id},fromDate:range.from.toISOString(),toDate:range.to.toISOString(),includeExceptionCount:true}).catch(()=>[]),call(api,'DriverChange',{deviceSearch:{id:id},fromDate:range.from.toISOString(),toDate:range.to.toISOString(),includeOverlappedChanges:true}).catch(()=>[])]);if(token!==loadToken)return;trips=tr||[];changes=dc||[];logs=(lr||[]).sort((a,b)=>new Date(a.dateTime)-new Date(b.dateTime));events=ee||[];render();setStatus(trips.length+' viagens carregadas');alertMsg('Consulta concluÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­da.',true)}catch(e){console.error(e);setStatus('Erro');alertMsg('Erro: '+(e.message||''),false,true)}}
+function render(){renderKpis();renderTrips();renderEvents();renderMap()}
+function renderKpis(){const dist=trips.reduce((s,t)=>s+Number(t.distance||0),0)/1000;const drive=trips.reduce((s,t)=>s+Number(t.drivingDuration||0),0);const stop=trips.reduce((s,t)=>s+Number(t.stopDuration||0),0);$('tripCount').textContent=trips.length;$('distanceKm').textContent=dist.toFixed(1);$('kpisBox').innerHTML=[['Viagens',trips.length,'perÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo','var(--blue)'],['DistÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ncia',dist.toFixed(1)+' km','oficial','var(--green)'],['Tempo dirigindo',Math.round(drive/60)+' min','Trip','var(--blue)'],['Tempo parado',Math.round(stop/60)+' min','Trip','var(--orange)'],['ExceÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âµes',events.length,'perÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­odo','var(--red)']].map(c=>`<div class="kpi"><span>${c[0]}</span><b style="color:${c[3]}">${c[1]}</b><small>${c[2]}</small></div>`).join('')}
+function renderTrips(){$('tripsBox').innerHTML=trips.length?trips.map((t,i)=>`<div style="padding:8px;border-bottom:1px solid #e5eaf1"><b>#${i+1}</b> ${fmtDate(t.start)} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ ${fmtDate(t.stop)}<br><small>${(Number(t.distance||0)/1000).toFixed(1)} km ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©dia ${Math.round(t.averageSpeed||0)} km/h ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ mÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡x ${Math.round(t.maximumSpeed||0)} km/h ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ exceÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âµes ${t.exceptionCount||0}</small></div>`).join(''):'<div style="padding:20px;text-align:center;color:#64748b">Sem viagens.</div>'}
+function renderEvents(){$('eventsBox').innerHTML=events.length?events.map(e=>`<div style="padding:6px;border-bottom:1px solid #e5eaf1"><b>${esc(e.rule&&e.rule.name||'Regra')}</b> ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${fmtDate(e.activeFrom)} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${Math.round((e.durationMs||0)/1000)}s</div>`).join(''):'<div style="padding:20px;text-align:center;color:#64748b">Sem exceÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Âµes.</div>'}
+function renderMap(){if(!map){map=L.map('mapBox');L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â© OpenStreetMap contributors'}).addTo(map);layer=L.layerGroup().addTo(map)}layer.clearLayers();const pts=logs.map(r=>[Number(r.latitude),Number(r.longitude)]).filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1]));if(pts.length){const poly=L.polyline(pts,{color:'#0ea5e9',weight:3}).addTo(layer);map.fitBounds(poly.getBounds(),{padding:[20,20]});if(pts[0])L.marker(pts[0]).addTo(layer).bindPopup('InÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­cio');if(pts[pts.length-1])L.marker(pts[pts.length-1]).addTo(layer).bindPopup('TÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©rmino')}events.forEach(e=>{const lr=nearestLog(e.activeFrom);if(!lr)return;const m=L.circleMarker([Number(lr.latitude),Number(lr.longitude)],{radius:6,color:'#ef4444',fillColor:'#ef4444',fillOpacity:.8}).addTo(layer);m.bindPopup(esc(e.rule&&e.rule.name||'ExceÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â£o')+'<br>'+fmtDate(e.activeFrom))})}
+function nearestLog(dt){if(!logs.length||!dt)return null;const t=new Date(dt).getTime();let best=null,diff=Infinity;logs.forEach(r=>{const d=Math.abs(new Date(r.dateTime).getTime()-t);if(d<diff){diff=d;best=r}});return diff<=300000?best:null}
+function clearFilters(){$('deviceSelect').value='';$('periodFilter').value='1';setRangeFromPeriod();trips=[];logs=[];events=[];render()}
+function setStatus(t){const e=$('statusBox');if(e)e.textContent=t}
+function alertMsg(t,ok,err){const e=$('alertBox');if(!e)return;e.style.display='block';e.className='alert'+(ok?' ok':err?' err':'');e.textContent=t}
+window.geotab=window.geotab||{};window.geotab.addin=window.geotab.addin||{};window.geotab.addin.fleetTrip360=function(){return{initialize:function(api,state,cb){try{init(api)}catch(e){console.error(e)}if(cb)cb()},focus:function(){if(map)setTimeout(()=>map.invalidateSize(),200)},blur:function(){}}}
+function init(api){apiRef=api;shell();loadDevices()}
+</script>
+</body>
+</html>
