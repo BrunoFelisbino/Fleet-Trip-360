@@ -15,14 +15,14 @@
 <div id="app"><div style="padding:40px;color:#64748b;font-size:13px">Carregando Fleet Trip 360...</div></div>
 <script>
 'use strict';
-const DAY=86400000;
+const DAY_MS=86400000;
 let apiRef=null,map=null,layer=null,vehicles=[],trips=[],logs=[],events=[],changes=[],selectedDevice=null,loadToken=0;
 const $=id=>document.getElementById(id);
 const call=(api,t,s)=>new Promise((ok,err)=>api.call('Get',{typeName:t,search:s||{}},ok,err));
 const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function fmtDate(d){try{return new Date(d).toLocaleString('pt-BR')}catch(e){return String(d||'')}}
 function fmtNum(n){return Number(n||0).toLocaleString('pt-BR')}
-function currentRange(){const fromEl=$('dateFrom'),toEl=$('dateTo');let from=fromEl&&fromEl.value?new Date(fromEl.value):null,to=toEl&&toEl.value?new Date(toEl.value):null;if(!from||isNaN(from.getTime())){const days=Number($('periodFilter').value)||1;to=to&&!isNaN(to.getTime())?to:new Date();from=new Date(to.getTime()-days*DAY)}if(!to||isNaN(to.getTime()))to=new Date();if(from.getTime()>to.getTime()){const tmp=from;from=to;to=tmp}return{from,to}}
+function currentRange(){const fromEl=$('dateFrom'),toEl=$('dateTo');let from=fromEl&&fromEl.value?new Date(fromEl.value):null,to=toEl&&toEl.value?new Date(toEl.value):null;if(!from||isNaN(from.getTime())){const days=Number($('periodFilter').value)||1;to=to&&!isNaN(to.getTime())?to:new Date();from=new Date(to.getTime()-days*DAY_MS)}if(!to||isNaN(to.getTime()))to=new Date();if(from.getTime()>to.getTime()){const tmp=from;from=to;to=tmp}return{from,to}}
 function shell(){
 $('app').innerHTML=`<div class="head"><div class="title"><strong>Fleet Trip 360</strong><div class="sub">Historico real de viagens - MyGeotab</div></div><div class="pill" id="statusBox">Conectando...</div></div>
 <div class="bar">
@@ -49,7 +49,7 @@ $('pdfBtn').onclick=()=>window.print();
 $('periodFilter').onchange=()=>{setRangeFromPeriod();};
 setRangeFromPeriod();
 }
-function setRangeFromPeriod(){const days=Number($('periodFilter').value)||1;const to=new Date();const from=new Date(to.getTime()-days*DAY);$('dateFrom').value=toLocalInput(from);$('dateTo').value=toLocalInput(to)}
+function setRangeFromPeriod(){const days=Number($('periodFilter').value)||1;const to=new Date();const from=new Date(to.getTime()-days*DAY_MS);$('dateFrom').value=toLocalInput(from);$('dateTo').value=toLocalInput(to)}
 function toLocalInput(d){const pad=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())}
 async function loadDevices(){try{const devs=await call(apiRef,'Device',{});vehicles=devs||[];$('countBox').textContent=vehicles.length;const sel=$('deviceSelect');sel.innerHTML='<option value="">Selecione o veiculo</option>'+vehicles.map(d=>`<option value="${esc(d.id)}">${esc(d.name||d.id)} ${d.licensePlate?'- '+esc(d.licensePlate):''}</option>`).join('')}catch(e){console.error(e);alertMsg('Erro ao carregar veiculos: '+(e.message||''),false,true)}}
 async function loadHistory(api){if(!api){alertMsg('Abra dentro do MyGeotab.',false,true);return}const id=$('deviceSelect').value;if(!id){alertMsg('Selecione um veiculo.',false,true);return}selectedDevice=vehicles.find(v=>v.id===id);const range=currentRange();const token=++loadToken;setStatus('Consultando viagens...');try{const [tr,lr,ee,dc]=await Promise.all([call(api,'Trip',{deviceSearch:{id:id},fromDate:range.from.toISOString(),toDate:range.to.toISOString(),includeOverlappedTrips:true}).catch(()=>[]),call(api,'LogRecord',{deviceSearch:{id:id},fromDate:range.from.toISOString(),toDate:range.to.toISOString()}).catch(()=>[]),call(api,'ExceptionEvent',{deviceSearch:{id:id},fromDate:range.from.toISOString(),toDate:range.to.toISOString(),includeExceptionCount:true}).catch(()=>[]),call(api,'DriverChange',{deviceSearch:{id:id},fromDate:range.from.toISOString(),toDate:range.to.toISOString(),includeOverlappedChanges:true}).catch(()=>[])]);if(token!==loadToken)return;trips=tr||[];changes=dc||[];logs=(lr||[]).sort((a,b)=>new Date(a.dateTime)-new Date(b.dateTime));events=ee||[];render();setStatus(trips.length+' viagens carregadas');alertMsg('Consulta concluida.',true)}catch(e){console.error(e);setStatus('Erro');alertMsg('Erro: '+(e.message||''),false,true)}}
