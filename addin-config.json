@@ -1,10 +1,10 @@
 {
   "name": "fleetTrip360",
   "supportEmail": "poze1988@gmail.com",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "items": [
     {
-      "url": "https://brunofelisbino.github.io/Fleet-Trip-360/?v=0.1.8",
+      "url": "https://brunofelisbino.github.io/Fleet-Trip-360/?v=0.1.9",
       "path": "ActivityLink/",
       "menuName": {
         "en": "Fleet Trip 360",
@@ -15,3 +15,4 @@
   ],
   "isSigned": false
 }
+
